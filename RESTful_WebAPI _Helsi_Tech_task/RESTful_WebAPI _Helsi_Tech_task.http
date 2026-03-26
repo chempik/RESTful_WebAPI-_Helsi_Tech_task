@@ -1,0 +1,6 @@
+@RESTful_WebAPI__Helsi_Tech_task_HostAddress = http://localhost:5198
+
+GET {{RESTful_WebAPI__Helsi_Tech_task_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
