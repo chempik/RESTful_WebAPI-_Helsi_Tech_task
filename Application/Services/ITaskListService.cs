@@ -1,7 +1,4 @@
 ﻿using Application.DTOs;
-using Domain.Interfaces;
-using Domain.Entities;
-using System.Linq.Dynamic.Core;
 
 namespace Application.Services
 {

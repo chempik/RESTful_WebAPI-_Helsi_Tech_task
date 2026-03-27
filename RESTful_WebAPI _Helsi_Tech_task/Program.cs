@@ -4,9 +4,9 @@ using Domain.Interfaces;
 using Application.Services;
 using Application.Mappings;
 using FluentValidation;
-using Application.DTOs;
 using RESTful_WebAPI__Helsi_Tech_task.Middleware;
 using Application;
+using FluentValidation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +30,7 @@ builder.Services.AddAutoMapper(typeof(TaskListProfile));
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<TaskListCreateDtoValidator>();
+builder.Services.AddFluentValidationAutoValidation();
 
 // HttpContextAccessor
 builder.Services.AddHttpContextAccessor();

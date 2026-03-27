@@ -6,7 +6,6 @@ namespace RESTful_WebAPI__Helsi_Tech_task.Controllers
 {
     [ApiController]
     [Route("api/tasklists")]
-    //public class TaskListsController : Controller
     public class TaskListsController : ControllerBase
     {
         private readonly ITaskListService _taskListService;

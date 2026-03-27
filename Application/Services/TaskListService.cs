@@ -28,13 +28,13 @@ namespace Application.Services
             if (requireOwner)
             {
                 if (taskList.OwnerId != userId)
-                    throw new Exception("Only the owner can perform this action.");
+                    throw new UnauthorizedAccessException("Only the owner can perform this action.");
                 return taskList;
             }
 
             // Check: owner or shared
             if (taskList.OwnerId != userId && !await _shareRepo.IsUserSharedAsync(taskListId, userId))
-                throw new Exception("You do not have permission to access this task list.");
+                throw new UnauthorizedAccessException("You do not have permission to access this task list.");
 
             return taskList;
         }
@@ -64,8 +64,8 @@ namespace Application.Services
             // only owner can remove
             await EnsureAccessAsync(currentUserId, taskListId, requireOwner: true);
             await _taskListRepo.DeleteAsync(taskListId);
-            // optional: remove all relation
-            // await _shareRepo.RemoveAllForTaskListAsync(taskListId);
+            // remove all relation
+            await _shareRepo.RemoveAllForTaskListAsync(taskListId);
         }
 
         public async Task<ResponseDto> GetByIdAsync(string currentUserId, string taskListId)

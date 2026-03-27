@@ -1,11 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Interfaces;
 using MongoDB.Driver;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Infrastructure.Repositories
 {
@@ -37,6 +32,11 @@ namespace Infrastructure.Repositories
         public async Task RemoveShareAsync(string taskListId, string userId)
         {
             await _collection.DeleteOneAsync(x => x.TaskListId == taskListId && x.UserId == userId);
+        }
+
+        public async Task RemoveAllForTaskListAsync(string taskListId)
+        {
+            await _collection.DeleteManyAsync(x => x.TaskListId == taskListId);
         }
     }
 }
