@@ -7,13 +7,21 @@ namespace Infrastructure.Repositories
 {
     public class MongoTaskListRepository : ITaskListRepository
     {
-        private readonly IMongoDatabase _database;
         private readonly IMongoCollection<TaskList> _collection;
 
         public MongoTaskListRepository(IMongoDatabase database)
         {
-            _database = database;
             _collection = database.GetCollection<TaskList>("TaskLists");
+
+            CreateIndexes();
+        }
+
+        private void CreateIndexes()
+        {
+            var indexKeys = Builders<TaskList>.IndexKeys.Ascending(x => x.SharedWithUserIds);
+            var indexModel = new CreateIndexModel<TaskList>(indexKeys);
+
+            _collection.Indexes.CreateOne(indexModel);
         }
 
         public async Task<TaskList?> GetByIdAsync(string id)
@@ -29,30 +37,8 @@ namespace Infrastructure.Repositories
 
         public async Task<IEnumerable<TaskList>> GetBySharedWithUserIdAsync(string userId, int skip, int take)
         {
-            var sharesCollection = _database.GetCollection<TaskListShare>("TaskListShares");
-            var pipeline = new[]
-            {
-                // Filter shares by user
-                new BsonDocument("$match", new BsonDocument("UserId", userId)),
-                // Lookup task lists
-                new BsonDocument("$lookup", new BsonDocument
-                {
-                    { "from", "TaskLists" },
-                    { "localField", "TaskListId" },
-                    { "foreignField", "Id" },
-                    { "as", "taskList" }
-                }),
-                // Unwind the taskList array
-                new BsonDocument("$unwind", new BsonDocument("path", "$taskList")),
-                // Replace root with taskList document
-                new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$taskList")),
-                // Pagination
-                new BsonDocument("$skip", skip),
-                new BsonDocument("$limit", take)
-            };
-
-            var result = await sharesCollection.Aggregate<TaskList>(pipeline).ToListAsync();
-            return result;
+            return await _collection.Find(x => x.SharedWithUserIds.Contains(userId))
+          .Skip(skip).Limit(take).ToListAsync();
         }
 
         public async Task<TaskList> CreateAsync(TaskList taskList)
@@ -75,6 +61,31 @@ namespace Infrastructure.Repositories
         {
             var count = await _collection.CountDocumentsAsync(x => x.Id == id);
             return count > 0;
+        }
+        public async Task AddShareAsync(string taskListId, string userId)
+        {
+            var update = Builders<TaskList>.Update.AddToSet(x => x.SharedWithUserIds, userId);
+            await _collection.UpdateOneAsync(x => x.Id == taskListId, update);
+        }
+
+        public async Task RemoveShareAsync(string taskListId, string userId)
+        {
+            var update = Builders<TaskList>.Update.Pull(x => x.SharedWithUserIds, userId);
+            await _collection.UpdateOneAsync(x => x.Id == taskListId, update);
+        }
+
+        public async Task<bool> IsUserSharedAsync(string taskListId, string userId)
+        {
+            var filter = Builders<TaskList>.Filter.Eq(x => x.Id, taskListId) &
+                         Builders<TaskList>.Filter.AnyEq(x => x.SharedWithUserIds, userId);
+            var count = await _collection.CountDocumentsAsync(filter);
+            return count > 0;
+        }
+
+        public async Task<IEnumerable<string>> GetSharedUserIdsAsync(string taskListId)
+        {
+            var taskList = await GetByIdAsync(taskListId);
+            return taskList?.SharedWithUserIds ?? Enumerable.Empty<string>();
         }
     }
 }

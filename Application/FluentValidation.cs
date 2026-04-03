@@ -15,7 +15,7 @@ namespace Application
     {
         public TaskListUpdateDtoValidator()
         {
-            RuleFor(x => x.Id).NotEmpty();
+            RuleFor(x => x.Id).NotEmpty().WithMessage("Task list Id is required.");
             RuleFor(x => x.Name).NotEmpty().Length(1, 255);
         }
     }

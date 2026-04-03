@@ -4,13 +4,13 @@ namespace Application.Services
 {
     public interface ITaskListService
     {
-        Task<ResponseDto> CreateAsync(string currentUserId, CreateDto dto);
-        Task<ResponseDto> UpdateAsync(string currentUserId, UpdateDto dto);
-        Task DeleteAsync(string currentUserId, string taskListId);
-        Task<ResponseDto> GetByIdAsync(string currentUserId, string taskListId);
-        Task<PagedResult<SummaryDto>> GetUserListsAsync(string currentUserId, int page, int pageSize);
-        Task AddShareAsync(string currentUserId, string taskListId, string targetUserId);
-        Task<IEnumerable<string>> GetSharesAsync(string currentUserId, string taskListId);
-        Task RemoveShareAsync(string currentUserId, string taskListId, string targetUserId);
+        Task<ResponseDto> CreateAsync(CreateDto dto);
+        Task<ResponseDto> UpdateAsync(UpdateDto dto);
+        Task DeleteAsync(string taskListId);
+        Task<ResponseDto> GetByIdAsync(string taskListId);
+        Task<PagedResult<SummaryDto>> GetUserListsAsync(int page, int pageSize);
+        Task AddShareAsync(string taskListId, string targetUserId);
+        Task<IEnumerable<string>> GetSharesAsync(string taskListId);
+        Task RemoveShareAsync(string taskListId, string targetUserId);
     }
 }

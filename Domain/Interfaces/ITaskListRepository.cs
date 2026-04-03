@@ -11,5 +11,9 @@ namespace Domain.Interfaces
         Task UpdateAsync(TaskList taskList);
         Task DeleteAsync(string id);
         Task<bool> ExistsAsync(string id);
+        Task AddShareAsync(string taskListId, string userId);
+        Task RemoveShareAsync(string taskListId, string userId);
+        Task<bool> IsUserSharedAsync(string taskListId, string userId);
+        Task<IEnumerable<string>> GetSharedUserIdsAsync(string taskListId);
     }
 }

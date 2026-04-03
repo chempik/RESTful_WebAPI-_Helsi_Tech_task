@@ -9,18 +9,19 @@ namespace Application.Services
     public class TaskListService : ITaskListService
     {
         private readonly ITaskListRepository _taskListRepo;
-        private readonly ITaskListShareRepository _shareRepo;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public TaskListService(ITaskListRepository taskListRepo, ITaskListShareRepository shareRepo, IMapper mapper)
+        public TaskListService(ITaskListRepository taskListRepo, IMapper mapper, ICurrentUserService currentUserService)
         {
             _taskListRepo = taskListRepo;
-            _shareRepo = shareRepo;
             _mapper = mapper;
+            _currentUserService = currentUserService;
         }
 
-        private async Task<TaskList> EnsureAccessAsync(string userId, string taskListId, bool requireOwner = false)
+        private async Task<TaskList> EnsureAccessAsync(string taskListId, bool requireOwner = false)
         {
+            var userId = _currentUserService.GetCurrentUserId();
             var taskList = await _taskListRepo.GetByIdAsync(taskListId);
             if (taskList == null)
                 throw new Exception($"Task list with id {taskListId} not found.");
@@ -33,100 +34,99 @@ namespace Application.Services
             }
 
             // Check: owner or shared
-            if (taskList.OwnerId != userId && !await _shareRepo.IsUserSharedAsync(taskListId, userId))
+            if (taskList.OwnerId != userId && !taskList.SharedWithUserIds.Contains(userId))
                 throw new UnauthorizedAccessException("You do not have permission to access this task list.");
 
             return taskList;
         }
 
-        public async Task<ResponseDto> CreateAsync(string currentUserId, CreateDto dto)
+        public async Task<ResponseDto> CreateAsync(CreateDto dto)
         {
+            var userId = _currentUserService.GetCurrentUserId();
+
             var entity = _mapper.Map<TaskList>(dto);
-            entity.OwnerId = currentUserId;
+            entity.OwnerId = userId;
             entity.Id = Guid.NewGuid().ToString();
             entity.CreatedAt = DateTime.UtcNow;
             entity.UpdatedAt = DateTime.UtcNow;
+            entity.SharedWithUserIds = new List<string>();
 
             var created = await _taskListRepo.CreateAsync(entity);
             return _mapper.Map<ResponseDto>(created);
         }
 
-        public async Task<ResponseDto> UpdateAsync(string currentUserId, UpdateDto dto)
+        public async Task<ResponseDto> UpdateAsync(UpdateDto dto)
         {
-            var taskList = await EnsureAccessAsync(currentUserId, dto.Id);
-            _mapper.Map(dto, taskList); // update Name and UpdatedAt
+            if (string.IsNullOrEmpty(dto.Id))
+                throw new Exception("Task list Id is required.");
+
+            var taskList = await EnsureAccessAsync(dto.Id);
+            _mapper.Map(dto, taskList);
+            taskList.UpdatedAt = DateTime.UtcNow;
             await _taskListRepo.UpdateAsync(taskList);
             return _mapper.Map<ResponseDto>(taskList);
         }
 
-        public async Task DeleteAsync(string currentUserId, string taskListId)
+        public async Task DeleteAsync(string taskListId)
         {
             // only owner can remove
-            await EnsureAccessAsync(currentUserId, taskListId, requireOwner: true);
+            await EnsureAccessAsync(taskListId, requireOwner: true);
             await _taskListRepo.DeleteAsync(taskListId);
-            // remove all relation
-            await _shareRepo.RemoveAllForTaskListAsync(taskListId);
         }
 
-        public async Task<ResponseDto> GetByIdAsync(string currentUserId, string taskListId)
+        public async Task<ResponseDto> GetByIdAsync(string taskListId)
         {
-            await EnsureAccessAsync(currentUserId, taskListId);
+            await EnsureAccessAsync(taskListId);
             var taskList = await _taskListRepo.GetByIdAsync(taskListId);
             return _mapper.Map<ResponseDto>(taskList);
         }
 
-        public async Task<PagedResult<SummaryDto>> GetUserListsAsync(string currentUserId, int page, int pageSize)
+        public async Task<PagedResult<SummaryDto>> GetUserListsAsync(int page, int pageSize)
         {
+            var userId = _currentUserService.GetCurrentUserId();
             // get lists where user is owner or has access
-            var owned = await _taskListRepo.GetByOwnerIdAsync(currentUserId, (page - 1) * pageSize, pageSize);
-            var shared = await _taskListRepo.GetBySharedWithUserIdAsync(currentUserId, (page - 1) * pageSize, pageSize);
+            int skip = (page - 1) * pageSize;
+            var owned = await _taskListRepo.GetByOwnerIdAsync(userId, skip, pageSize);
+            var shared = await _taskListRepo.GetBySharedWithUserIdAsync(userId, skip, pageSize);
 
             // We combine, sort by creation time (from newest to oldest)
             var all = owned.Concat(shared)
+                .GroupBy(x => x.Id)
+                .Select(g => g.First())
                 .OrderByDescending(x => x.CreatedAt)
-                .Skip((page - 1) * pageSize)
+                .Skip(skip)
                 .Take(pageSize)
                 .ToList();
 
-            var totalCount = owned.Count() + shared.Count(); 
+            var totalCount = all.Count(); 
 
             var items = _mapper.Map<IEnumerable<SummaryDto>>(all);
             return new PagedResult<SummaryDto>(items, totalCount, page, pageSize);
         }
 
-        public async Task AddShareAsync(string currentUserId, string taskListId, string targetUserId)
+        public async Task AddShareAsync(string taskListId, string targetUserId)
         {
-            // Checking access to the list (owner or shared)
-            await EnsureAccessAsync(currentUserId, taskListId);
+            var taskList = await EnsureAccessAsync(taskListId);
 
-            // We do not add the owner himself or if there is already one
-            var taskList = await _taskListRepo.GetByIdAsync(taskListId);
             if (taskList.OwnerId == targetUserId)
                 throw new Exception("Cannot share with the owner.");
 
-            if (await _shareRepo.IsUserSharedAsync(taskListId, targetUserId))
+            if (taskList.SharedWithUserIds.Contains(targetUserId))
                 throw new Exception("User already has access.");
 
-            var share = new TaskListShare
-            {
-                Id = Guid.NewGuid().ToString(),
-                TaskListId = taskListId,
-                UserId = targetUserId
-            };
-            await _shareRepo.AddShareAsync(share);
+            await _taskListRepo.AddShareAsync(taskListId, targetUserId);
         }
 
-        public async Task<IEnumerable<string>> GetSharesAsync(string currentUserId, string taskListId)
+        public async Task<IEnumerable<string>> GetSharesAsync(string taskListId)
         {
-            await EnsureAccessAsync(currentUserId, taskListId);
-            var shares = await _shareRepo.GetSharesForTaskListAsync(taskListId);
-            return shares.Select(s => s.UserId);
+            await EnsureAccessAsync(taskListId);
+            return await _taskListRepo.GetSharedUserIdsAsync(taskListId);
         }
 
-        public async Task RemoveShareAsync(string currentUserId, string taskListId, string targetUserId)
+        public async Task RemoveShareAsync(string taskListId, string targetUserId)
         {
-            await EnsureAccessAsync(currentUserId, taskListId);
-            await _shareRepo.RemoveShareAsync(taskListId, targetUserId);
+            await EnsureAccessAsync(taskListId);
+            await _taskListRepo.RemoveShareAsync(taskListId, targetUserId);
         }
     }
 }

@@ -7,6 +7,7 @@ using FluentValidation;
 using RESTful_WebAPI__Helsi_Tech_task.Middleware;
 using Application;
 using FluentValidation.AspNetCore;
+using RESTful_WebAPI__Helsi_Tech_task.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,9 +21,9 @@ builder.Services.AddMongoDb(builder.Configuration);
 
 // Repositories
 builder.Services.AddScoped<ITaskListRepository, MongoTaskListRepository>();
-builder.Services.AddScoped<ITaskListShareRepository, MongoTaskListShareRepository>();
 
 // Services
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ITaskListService, TaskListService>();
 
 // AutoMapper
